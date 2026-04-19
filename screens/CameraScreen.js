@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View, Text, TouchableOpacity,
   StyleSheet, SafeAreaView, Image,
@@ -10,6 +10,8 @@ const CameraScreen = ({ navigation }) => {
   const [snapshot, setSnapshot] = useState(null);
   const [loading, setLoading] = useState(false);
   const [lastUpdated, setLastUpdated] = useState(null);
+  const [autoRefresh, setAutoRefresh] = useState(false);
+  const intervalRef = useRef(null);
 
   const fetchSnapshot = async () => {
     setLoading(true);
@@ -22,6 +24,7 @@ const CameraScreen = ({ navigation }) => {
       }
     } catch {
       Alert.alert('Error', 'Could not fetch camera snapshot.');
+      setAutoRefresh(false);
     } finally {
       setLoading(false);
     }
@@ -31,21 +34,41 @@ const CameraScreen = ({ navigation }) => {
     fetchSnapshot();
   }, []);
 
+  useEffect(() => {
+    if (autoRefresh) {
+      intervalRef.current = setInterval(fetchSnapshot, 2000);
+    } else {
+      clearInterval(intervalRef.current);
+    }
+    return () => clearInterval(intervalRef.current);
+  }, [autoRefresh]);
+
+  // Stop auto refresh when leaving screen
+  useEffect(() => {
+    return () => clearInterval(intervalRef.current);
+  }, []);
+
   return (
     <SafeAreaView style={styles.container}>
-      <TouchableOpacity style={styles.back} onPress={() => navigation.goBack()}>
+      <TouchableOpacity style={styles.back} onPress={() => {
+        setAutoRefresh(false);
+        navigation.goBack();
+      }}>
         <Text style={styles.backText}>← Back</Text>
       </TouchableOpacity>
 
       <Text style={styles.title}>Live Camera</Text>
 
       <View style={styles.cameraBox}>
-        {loading ? (
-          <ActivityIndicator size="large" color="#00c8ff" />
-        ) : snapshot ? (
+        {snapshot ? (
           <Image source={{ uri: snapshot }} style={styles.image} resizeMode="contain" />
         ) : (
-          <Text style={styles.noImage}>No image available</Text>
+          <ActivityIndicator size="large" color="#00c8ff" />
+        )}
+        {loading && snapshot && (
+          <View style={styles.refreshingBadge}>
+            <Text style={styles.refreshingText}>Updating...</Text>
+          </View>
         )}
       </View>
 
@@ -53,9 +76,20 @@ const CameraScreen = ({ navigation }) => {
         <Text style={styles.timestamp}>Last updated: {lastUpdated}</Text>
       )}
 
-      <TouchableOpacity style={styles.button} onPress={fetchSnapshot}>
-        <Text style={styles.buttonText}>↻ Refresh Snapshot</Text>
-      </TouchableOpacity>
+      <View style={styles.buttonRow}>
+        <TouchableOpacity style={styles.button} onPress={fetchSnapshot}>
+          <Text style={styles.buttonText}>↻ Snapshot</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.button, { borderColor: autoRefresh ? '#00c864' : '#2a3a4a' }]}
+          onPress={() => setAutoRefresh(!autoRefresh)}
+        >
+          <Text style={[styles.buttonText, { color: autoRefresh ? '#00c864' : '#00c8ff' }]}>
+            {autoRefresh ? '⏹ Stop Live' : '▶ Go Live'}
+          </Text>
+        </TouchableOpacity>
+      </View>
     </SafeAreaView>
   );
 };
@@ -94,9 +128,18 @@ const styles = StyleSheet.create({
     width: '100%',
     height: '100%'
   },
-  noImage: {
-    color: '#4a6070',
-    fontSize: 16
+  refreshingBadge: {
+    position: 'absolute',
+    bottom: 10,
+    right: 10,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 20
+  },
+  refreshingText: {
+    color: '#00c8ff',
+    fontSize: 11
   },
   timestamp: {
     color: '#4a6070',
@@ -105,18 +148,23 @@ const styles = StyleSheet.create({
     marginTop: 12,
     marginBottom: 16
   },
+  buttonRow: {
+    flexDirection: 'row',
+    gap: 12,
+    marginBottom: 8
+  },
   button: {
+    flex: 1,
     backgroundColor: '#1a2030',
     padding: 16,
     borderRadius: 14,
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: '#2a3a4a',
-    marginBottom: 8
+    borderColor: '#2a3a4a'
   },
   buttonText: {
     color: '#00c8ff',
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '600'
   }
 });
